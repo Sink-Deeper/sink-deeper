@@ -1,0 +1,20 @@
+/* Noir: pure black, white as the accent, monochrome covers, oversized type. */
+:root {
+  --color-bg: #000000;
+  --color-surface: #0c0c0c;
+  --color-surface-2: #171717;
+  --color-border: #262626;
+  --color-fg: #ffffff;
+  --color-muted: #8a8a8a;
+  --color-accent: #ffffff;
+  --color-accent-2: #d4d4d4;
+  --color-ink: #000000;
+}
+h1, h2, h3 { letter-spacing: -0.045em; font-weight: 800; }
+[data-cover] svg { filter: grayscale(1) contrast(1.15) brightness(0.9); }
+.chip-audience { background: #fff; color: #000; }
+.btn-primary { color: #000; }
+::selection { background: rgba(255,255,255,0.25); color: #000; }
+
+/* white accent means white-on-accent text must flip to black */
+.bg-accent.text-white, .bg-accent .text-white { color: #000; }

@@ -1,0 +1,13 @@
+/* Rose: dark with a warm pink tint in the surfaces and a hot pink accent. */
+:root {
+  --color-bg: #130f13;
+  --color-surface: #1b151b;
+  --color-surface-2: #261d25;
+  --color-border: #342731;
+  --color-fg: #f8f1f5;
+  --color-muted: #a08c9a;
+  --color-accent: #ff4d8d;
+  --color-accent-2: #ff7fae;
+  --color-ink: #130f13;
+}
+::selection { background: rgba(255, 77, 141, 0.3); }

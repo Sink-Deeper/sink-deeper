@@ -1,0 +1,44 @@
+@import "tailwindcss";
+
+/*
+  Sinkdeeper: a modern audio app. Deep plum dark, one purple accent, bold geometric sans,
+  generated cover art on every track, big waveform. Mono only for times and counts.
+*/
+@theme {
+  --color-bg: #100c16;
+  --color-surface: #17121f;
+  --color-surface-2: #211a2c;
+  --color-border: #2f2540;
+  --color-fg: #f4effa;
+  --color-muted: #9a8fae;
+  --color-accent: #a855f7;
+  --color-accent-2: #c084fc;
+  --color-ink: #100c16;
+  --font-sans: "Manrope Variable", "Segoe UI", system-ui, -apple-system, Roboto, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+html, body { background: var(--color-bg); color: var(--color-fg); }
+body { font-family: var(--font-sans); -webkit-font-smoothing: antialiased; font-feature-settings: "ss01"; }
+* { scrollbar-color: #3a2f4c transparent; }
+input, textarea, select { color-scheme: dark; }
+::selection { background: rgba(168, 85, 247, 0.3); }
+
+h1, h2, h3 { font-weight: 800; letter-spacing: -0.025em; }
+.mono { font-family: var(--font-mono); font-feature-settings: "tnum"; }
+.eyebrow { font-size: 0.7rem; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: var(--color-muted); }
+
+@utility btn {
+  @apply inline-flex items-center justify-center gap-2 rounded-full px-4 py-2 text-sm font-semibold transition-colors disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer;
+}
+@utility btn-primary { @apply btn bg-accent text-white hover:bg-accent-2; }
+@utility btn-ghost { @apply btn bg-transparent text-fg hover:bg-surface-2; }
+@utility btn-outline { @apply btn border border-border bg-surface text-fg hover:bg-surface-2 hover:border-muted/60; }
+@utility input {
+  @apply w-full rounded-xl border border-border bg-surface px-3.5 py-2.5 text-sm text-fg placeholder:text-muted focus:outline-none focus:border-accent focus:ring-2 focus:ring-accent/25;
+}
+@utility card { @apply rounded-2xl border border-border bg-surface; }
+@utility chip-audience { @apply inline-flex items-center rounded-md bg-accent text-white font-bold px-1.5 py-px text-[0.68rem] tracking-wider uppercase hover:bg-accent-2 transition-colors; }
+@utility chip-active { @apply inline-flex items-center rounded-full bg-fg text-ink font-semibold px-3 py-1 text-xs transition-colors; }
+@utility chip { @apply inline-flex items-center rounded-full bg-surface-2 px-3 py-1 text-xs font-medium text-muted hover:text-fg hover:bg-border transition-colors; }
+@utility tile { @apply rounded-xl overflow-hidden bg-surface-2 relative; }

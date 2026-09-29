@@ -1,0 +1,23 @@
+# dependencies and builds
+node_modules
+client/dist
+client/dist-*
+
+# local data: database, audio, avatars, listener key
+data/
+*.db
+*.db-shm
+*.db-wal
+*.m4a
+*.mp3
+
+# secrets and local config (keep .env.example)
+.env
+.env.*
+!.env.example
+
+# private notes that stay off the public repo
+docs/private/
+
+*.log
+.DS_Store

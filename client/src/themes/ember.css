@@ -1,0 +1,13 @@
+/* Ember: warm charcoal, hot coral accent, tracklist rows. SoundCloud energy without the orange-on-white. */
+:root {
+  --color-bg: #121011;
+  --color-surface: #1a1718;
+  --color-surface-2: #242021;
+  --color-border: #2f2a2b;
+  --color-fg: #f6f1ee;
+  --color-muted: #9a8f8b;
+  --color-accent: #ff5a3c;
+  --color-accent-2: #ff8a70;
+  --color-ink: #121011;
+}
+h1, h2, h3 { letter-spacing: -0.035em; }
