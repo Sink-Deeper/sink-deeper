@@ -12,7 +12,7 @@ import { indexAudio, unindexAudio } from "../search.js";
 import { AUDIO_SELECT, serializeAudio, canView, type AudioRow, avatarUrl } from "../serialize.js";
 import { isBunnyPath, bunnyKey, signedCdnUrl, getObject, deleteObject } from "../storage.js";
 import { Readable } from "node:stream";
-import { rateLimit, hit, keyFor, humanize } from "../ratelimit.js";
+import { rateLimit, hit, peek, keyFor, humanize, networkOf } from "../ratelimit.js";
 import { quotaFor } from "./auth.js";
 import { fingerprint } from "../fingerprint.js";
 import { recordAction } from "../accountability.js";
@@ -401,6 +401,19 @@ audiosRouter.delete(
 );
 
 // ---- Streaming (mounted separately at /media) -----------------------------
+// Re-requesting the same audio (resumed or range downloads) shouldn't use up another download from the network's allowance
+const anonDownloads = new Map<string, number>();
+function recentAnonDownload(net: string, audioId: string): boolean {
+  const seen = anonDownloads.get(`${net}|${audioId}`);
+  return !!seen && Date.now() - seen < 3_600_000;
+}
+/** Only called once a download is allowed, so a refused request can't be retried for free. */
+function rememberAnonDownload(net: string, audioId: string): void {
+  const now = Date.now();
+  if (anonDownloads.size > 20_000) for (const [key, t] of anonDownloads) if (now - t > 3_600_000) anonDownloads.delete(key);
+  anonDownloads.set(`${net}|${audioId}`, now);
+}
+
 export const mediaRouter = Router();
 // Locally stored profile photos (on Bunny they're served from the CDN instead). Names are ours: <uid>-<rand>.webp
 mediaRouter.get("/avatars/:file", (req, res) => {
@@ -420,8 +433,26 @@ mediaRouter.get(
     const privileged = req.user?.id === a.user_id || !!req.user?.is_admin;
     if (download && !a.downloadable && !privileged) throw new HttpError(403, "The creator has disabled downloads for this audio");
     if (download && !privileged) {
-      const r = hit("downloads", keyFor(req), config.limits.downloadsPerHour, 3_600_000);
-      if (!r.ok) { res.setHeader("Retry-After", String(r.retryAfterSec)); throw new HttpError(429, `Download limit reached (${config.limits.downloadsPerHour} per hour). Try again in ${humanize(r.retryAfterSec)}.`); }
+      if (req.user) {
+        const r = hit("downloads", keyFor(req), config.limits.downloadsPerHour, 3_600_000);
+        if (!r.ok) { res.setHeader("Retry-After", String(r.retryAfterSec)); throw new HttpError(429, `Download limit reached (${config.limits.downloadsPerHour} per hour). Try again in ${humanize(r.retryAfterSec)}.`); }
+      } else {
+        // Logged out: count distinct audios per network, not per address. On 2026-10-02 a scraper on one provider's
+        // network took 199 audios in an hour by rotating addresses and browser names, each "person" staying under the limit.
+        const net = networkOf(req.ip), wide = networkOf(req.ip, true);
+        if (!recentAnonDownload(net, a.id)) {
+          const n = peek("dl-net", net, config.limits.anonDownloadsPerHourPerNet, 3_600_000);
+          const w = peek("dl-wide", wide, config.limits.anonDownloadsPerHourPerWideNet, 3_600_000);
+          if (!n.ok || !w.ok) {
+            const wait = Math.max(n.retryAfterSec, w.retryAfterSec);
+            res.setHeader("Retry-After", String(wait));
+            throw new HttpError(429, `Too many downloads from your network right now. Log in to download more, or try again in ${humanize(wait)}.`);
+          }
+          hit("dl-net", net, config.limits.anonDownloadsPerHourPerNet, 3_600_000);
+          hit("dl-wide", wide, config.limits.anonDownloadsPerHourPerWideNet, 3_600_000);
+          rememberAnonDownload(net, a.id);
+        }
+      }
       // Count one download per listener per day (range requests for a single download share a row)
       const ins = db.prepare("INSERT OR IGNORE INTO download_events (audio_id, fingerprint, day) VALUES (?, ?, ?)")
         .run(a.id, req.user?.id ?? fingerprint(req), new Date().toISOString().slice(0, 10));

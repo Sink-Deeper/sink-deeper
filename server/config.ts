@@ -36,6 +36,9 @@ export const config = {
     uploadBurstPer10Min: num("MAX_UPLOADS_PER_10MIN", 5, { min: 1 }),
     userQuotaBytes: num("USER_QUOTA_MB", 5120, { min: 1 }) * 1024 * 1024,
     downloadsPerHour: num("MAX_DOWNLOADS_PER_HOUR", 30, { min: 1 }),
+    // Logged-out downloads are counted per network, since scrapers rotate addresses and browser names inside one block
+    anonDownloadsPerHourPerNet: num("ANON_DOWNLOADS_PER_HOUR_PER_NET", 20, { min: 1 }),          // IPv4 /24, IPv6 /48
+    anonDownloadsPerHourPerWideNet: num("ANON_DOWNLOADS_PER_HOUR_PER_WIDE_NET", 60, { min: 1 }), // IPv4 /16, IPv6 /32
     registrationsPerIpPerDay: num("MAX_REGISTRATIONS_PER_IP_PER_DAY", 5, { min: 1 }),
     loginAttemptsPer15Min: num("MAX_LOGIN_ATTEMPTS_PER_15MIN", 10, { min: 1 }),
     loginFailuresPerAccountPer15Min: num("MAX_LOGIN_FAILURES_PER_ACCOUNT_PER_15MIN", 20, { min: 1 }),

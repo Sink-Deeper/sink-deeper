@@ -78,3 +78,14 @@ export function humanize(sec: number): string {
   if (sec < 5400) return `${Math.ceil(sec / 60)} minutes`;
   return `${Math.ceil(sec / 3600)} hours`;
 }
+
+/** The network an address sits in: IPv4 /24 (or /16 when wide), IPv6 /48 (or /32). */
+export function networkOf(ip: string | undefined, wide = false): string {
+  if (!ip) return "unknown";
+  const v4 = ip.replace(/^::ffff:/i, "");
+  if (/^\d{1,3}(\.\d{1,3}){3}$/.test(v4)) return v4.split(".").slice(0, wide ? 2 : 3).join(".");
+  const [h, t] = ip.toLowerCase().split("::");
+  const head = h ? h.split(":") : [], tail = t ? t.split(":") : [];
+  const groups = [...head, ...Array(Math.max(0, 8 - head.length - tail.length)).fill("0"), ...tail];
+  return groups.slice(0, wide ? 2 : 3).map((g) => g.padStart(4, "0")).join(":");
+}
