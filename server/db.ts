@@ -174,7 +174,8 @@ addColumn("users", "verify_code", "TEXT");
 addColumn("users", "verified_source", "TEXT");
 addColumn("users", "verified_at", "INTEGER");
 addColumn("audios", "claimed_by", "TEXT");
-addColumn("users", "email", "TEXT");                  // optional recovery address; never required to sign up
+addColumn("users", "email", "TEXT");                   // optional recovery address, stored encrypted (server/emailstore.ts)
+addColumn("users", "email_lookup", "TEXT");            // keyed hash of the same address, so "forgot password" can find it
 addColumn("users", "email_verified_at", "INTEGER");    // only a verified address can recover an account
 addColumn("users", "avatar", "TEXT"); // profile photo: local path or bunny:avatars/<key>
 addColumn("audios", "group_id", "TEXT"); // versions of the same work (F4M / F4A ...) share the primary audio's id
@@ -205,3 +206,4 @@ db.exec(`CREATE TABLE IF NOT EXISTS auth_tokens (
 );
 CREATE INDEX IF NOT EXISTS idx_auth_tokens_user ON auth_tokens(user_id, kind);
 CREATE INDEX IF NOT EXISTS idx_auth_tokens_expiry ON auth_tokens(expires_at);`);
+db.exec("CREATE INDEX IF NOT EXISTS idx_users_email_lookup ON users(email_lookup) WHERE email_lookup IS NOT NULL");

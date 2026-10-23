@@ -14,6 +14,7 @@ import { deleteAccount } from "../account.js";
 import { recordAction } from "../accountability.js";
 import { mailEnabled, sendMail, linkTo } from "../mail.js";
 import { issueToken, consumeToken, RESET_TTL_MS, VERIFY_TTL_MS } from "../recovery.js";
+import { encryptEmail, decryptEmail, emailLookup } from "../emailstore.js";
 
 const USER_COLS = "id, username, display_name, avatar, bio, created_at, is_admin, banned, email, email_verified_at";
 const REG_WINDOW = 86_400_000;
@@ -34,7 +35,7 @@ const mailOn = (_req: unknown, _res: unknown, next: (e?: unknown) => void) =>
   next(mailEnabled ? undefined : new HttpError(503, "Email isn't set up on this site yet."));
 
 async function sendVerification(userId: string, username: string, email: string): Promise<void> {
-  const token = issueToken(userId, "verify", email, VERIFY_TTL_MS);
+  const token = issueToken(userId, "verify", emailLookup(email), VERIFY_TTL_MS);
   await sendMail({
     to: email,
     subject: "Confirm your Sinkdeeper recovery email",
@@ -60,7 +61,8 @@ authRouter.post(
     const uid = id();
     const hash = await hashPassword(password);
     try {
-      db.prepare("INSERT INTO users (id, username, password_hash, display_name, bio, created_at, email) VALUES (?, ?, ?, ?, '', ?, ?)").run(uid, username, hash, username, now(), email);
+      db.prepare("INSERT INTO users (id, username, password_hash, display_name, bio, created_at, email, email_lookup) VALUES (?, ?, ?, ?, '', ?, ?, ?)")
+        .run(uid, username, hash, username, now(), email ? encryptEmail(email) : null, email ? emailLookup(email) : null);
     } catch (e: any) {
       if (String(e?.code).includes("CONSTRAINT")) throw new HttpError(409, "That username is taken");
       throw e;
@@ -218,7 +220,7 @@ authRouter.post(
     const parsed = z.object({ email: emailField }).safeParse(req.body);
     if (!parsed.success) throw new HttpError(400, parsed.error.issues[0]?.message ?? "Invalid email");
     const email = parsed.data.email;
-    db.prepare("UPDATE users SET email = ?, email_verified_at = NULL WHERE id = ?").run(email, req.user!.id);
+    db.prepare("UPDATE users SET email = ?, email_lookup = ?, email_verified_at = NULL WHERE id = ?").run(encryptEmail(email), emailLookup(email), req.user!.id);
     await sendVerification(req.user!.id, req.user!.username, email);
     const user = db.prepare(`SELECT ${USER_COLS} FROM users WHERE id = ?`).get(req.user!.id) as any;
     res.json({ user: serializeUser(user, user) });
@@ -232,15 +234,16 @@ authRouter.post(
   rateLimit({ name: "email-resend", max: 5, windowMs: 3_600_000, message: "Too many emails sent. Try again in an hour." }),
   asyncHandler(async (req, res) => {
     const row = db.prepare("SELECT email, email_verified_at FROM users WHERE id = ?").get(req.user!.id) as { email: string | null; email_verified_at: number | null };
-    if (!row.email) throw new HttpError(400, "No recovery email on this account");
+    const address = decryptEmail(row.email);
+    if (!address) throw new HttpError(400, "No recovery email on this account");
     if (row.email_verified_at) return res.json({ ok: true });
-    await sendVerification(req.user!.id, req.user!.username, row.email);
+    await sendVerification(req.user!.id, req.user!.username, address);
     res.json({ ok: true });
   }),
 );
 
 authRouter.delete("/email", requireAuth, asyncHandler((req, res) => {
-  db.prepare("UPDATE users SET email = NULL, email_verified_at = NULL WHERE id = ?").run(req.user!.id);
+  db.prepare("UPDATE users SET email = NULL, email_lookup = NULL, email_verified_at = NULL WHERE id = ?").run(req.user!.id);
   db.prepare("DELETE FROM auth_tokens WHERE user_id = ?").run(req.user!.id);
   const user = db.prepare(`SELECT ${USER_COLS} FROM users WHERE id = ?`).get(req.user!.id) as any;
   res.json({ user: serializeUser(user, user) });
@@ -256,7 +259,8 @@ authRouter.post(
     const t = consumeToken(parsed.data.token, "verify");
     if (!t) throw new HttpError(400, "That link has expired or already been used. Send a new one from Settings.");
     // Only confirm the address the link was issued for: it may have been changed since
-    const changed = db.prepare("UPDATE users SET email_verified_at = ? WHERE id = ? AND lower(email) = ?").run(now(), t.user_id, t.email).changes;
+    // t.email is the keyed hash the link was issued for: confirms the address hasn't been changed since
+    const changed = db.prepare("UPDATE users SET email_verified_at = ? WHERE id = ? AND email_lookup = ?").run(now(), t.user_id, t.email).changes;
     if (!changed) throw new HttpError(400, "That address is no longer on the account.");
     res.json({ ok: true });
   }),
@@ -272,15 +276,17 @@ authRouter.post(
     const same = { ok: true, message: "If that account has a confirmed recovery email, a reset link is on its way." };
     if (!parsed.success || !parsed.data.account) return res.json(same);
     const account = parsed.data.account;
+    const looksLikeEmail = account.includes("@");
     const row = db.prepare(
-      "SELECT id, username, email FROM users WHERE email_verified_at IS NOT NULL AND banned = 0 AND (username = ? COLLATE NOCASE OR lower(email) = lower(?))",
-    ).get(account, account) as { id: string; username: string; email: string } | undefined;
-    if (row) {
+      "SELECT id, username, email FROM users WHERE email_verified_at IS NOT NULL AND banned = 0 AND (username = ? COLLATE NOCASE OR email_lookup = ?)",
+    ).get(account, looksLikeEmail ? emailLookup(account) : "") as { id: string; username: string; email: string } | undefined;
+    const address = row ? decryptEmail(row.email) : null;
+    if (row && address) {
       const perAccount = hit("forgot-account", `acct:${row.id}`, 3, 3_600_000);
       if (perAccount.ok) {
-        const token = issueToken(row.id, "reset", row.email, RESET_TTL_MS);
+        const token = issueToken(row.id, "reset", "", RESET_TTL_MS);
         await sendMail({
-          to: row.email,
+          to: address,
           subject: "Reset your Sinkdeeper password",
           text: `Hi ${row.username},\n\nSomeone asked to reset the password for your account. If that was you, use this link within the hour:\n\n${linkTo(`/reset-password?token=${token}`)}\n\nThe link works once. If it wasn't you, ignore this email: your password hasn't changed and nobody can get in without this link.\n`,
         }).catch((e) => console.error("[mail] reset send failed:", e instanceof Error ? e.message : e));

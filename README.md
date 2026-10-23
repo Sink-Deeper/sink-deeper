@@ -10,7 +10,7 @@ rather than having to take that on trust.
 
 ## Privacy, in short
 
-- **No email needed, no real name, one cookie.** Signing up takes a username and a password. An email address is optional, stored only if you add one, and used for a single thing: resetting a forgotten password. The only cookie keeps you logged in. No analytics services, trackers or ad networks.
+- **No email needed, no real name, one cookie.** Signing up takes a username and a password. An email address is optional, used for a single thing: resetting a forgotten password. It is stored encrypted (AES-256-GCM, key in the server environment) next to a keyed hash used for lookups, so a leaked database or backup exposes neither who has an address nor what it is (`server/emailstore.ts`). The only cookie keeps you logged in. No analytics services, trackers or ad networks.
 - **Anonymous listening is unlinkable.** Logged-out listeners are counted with a code made from their address and browser,
   scrambled with a random key that's replaced every day and never kept (`server/fingerprint.ts`). Raw addresses are never
   stored in the database.

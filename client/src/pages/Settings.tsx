@@ -131,7 +131,7 @@ export function SettingsPage() {
               <input className="input flex-1 min-w-48" type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@example.com" maxLength={200} required autoComplete="email" />
               <button className="btn-primary" type="submit" disabled={emailBusy}>{emailBusy ? "…" : "Save"}</button>
             </div>
-            <p className="text-xs text-muted">Only ever used to reset your password. It's never shown on your profile, never shared, and you can remove it any time.</p>
+            <p className="text-xs text-muted">Only ever used to reset your password. It's stored encrypted, never shown on your profile, never shared, and you can remove it any time.</p>
             {emailMsg && <p className="text-sm text-muted">{emailMsg}</p>}
           </form>
         </div>

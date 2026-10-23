@@ -4,6 +4,7 @@ import { isAudienceTag } from "./util.js";
 import type { User } from "./auth.js";
 import path from "node:path";
 import { isBunnyPath, bunnyKey, signedCdnUrl } from "./storage.js";
+import { decryptEmail } from "./emailstore.js";
 
 /** Public URL for a stored profile photo (signed CDN URL on Bunny, local media route otherwise). */
 export function avatarUrl(a: string | null | undefined): string | null {
@@ -111,7 +112,7 @@ export function serializeUser(u: User & { audio_count?: number; followers?: numb
     followers: u.followers ?? 0,
     following: u.following ?? 0,
     isSelf: viewer?.id === u.id,
-    email: viewer?.id === u.id ? u.email ?? null : undefined,
+    email: viewer?.id === u.id ? decryptEmail(u.email) : undefined,
     emailVerified: viewer?.id === u.id ? !!u.email_verified_at : undefined,
     isAdmin: viewer?.id === u.id ? !!u.is_admin : undefined,
     banned: viewer?.is_admin ? !!u.banned : undefined,

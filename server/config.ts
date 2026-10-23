@@ -24,17 +24,28 @@ export const config = {
   /** Per-step ffmpeg timeout. */
   ffmpegTimeoutMs: num("FFMPEG_TIMEOUT_MIN", 30, { min: 1 }) * 60_000,
   keepOriginals: process.env.KEEP_ORIGINALS === "1",
+  /** 32-byte key (base64) that encrypts stored recovery addresses. Without it, email stays off. */
+  emailKey: (() => {
+    const raw = (process.env.MAIL_ENCRYPTION_KEY ?? "").trim();
+    if (!raw) return null;
+    const buf = Buffer.from(raw, "base64");
+    if (buf.length !== 32) { console.warn("[config] MAIL_ENCRYPTION_KEY must be 32 bytes of base64; email disabled"); return null; }
+    return buf;
+  })(),
   /** Transactional email, used only for optional account recovery. Unset = the whole feature stays hidden. */
   mail: (() => {
     const e = process.env;
     const provider = (e.MAIL_PROVIDER ?? "").trim().toLowerCase();
     if (!provider) return null;
-    if (!["resend", "postmark", "outbox"].includes(provider)) { console.warn(`[config] unknown MAIL_PROVIDER ${JSON.stringify(provider)}; email disabled`); return null; }
+    if (!["resend", "postmark", "ses", "outbox"].includes(provider)) { console.warn(`[config] unknown MAIL_PROVIDER ${JSON.stringify(provider)}; email disabled`); return null; }
     const from = (e.MAIL_FROM ?? "").trim();
     if (!from) { console.warn("[config] MAIL_FROM is not set; email disabled"); return null; }
+    // Addresses are only ever stored encrypted, so the key is as necessary as the provider
+    if (!(e.MAIL_ENCRYPTION_KEY ?? "").trim()) { console.warn("[config] MAIL_ENCRYPTION_KEY is not set; email disabled"); return null; }
     // "outbox" writes messages to disk instead of sending them, for local testing
     if (provider !== "outbox" && !e.MAIL_API_KEY) { console.warn("[config] MAIL_API_KEY is not set; email disabled"); return null; }
-    return { provider, from, apiKey: e.MAIL_API_KEY ?? "", replyTo: (e.MAIL_REPLY_TO ?? "").trim() || null };
+    if (provider === "ses" && !e.MAIL_SECRET_KEY) { console.warn("[config] MAIL_SECRET_KEY is not set; email disabled"); return null; }
+    return { provider, from, apiKey: e.MAIL_API_KEY ?? "", secretKey: e.MAIL_SECRET_KEY ?? "", region: (e.MAIL_REGION ?? "us-east-1").trim(), replyTo: (e.MAIL_REPLY_TO ?? "").trim() || null };
   })(),
   // Unreleased features, off unless explicitly enabled on the server
   features: { versions: process.env.FEATURE_VERSIONS === "1" },
