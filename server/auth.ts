@@ -16,6 +16,8 @@ export type User = {
   id: string;
   username: string;
   display_name: string;
+  email?: string | null;
+  email_verified_at?: number | null;
   avatar: string | null;
   bio: string;
   created_at: number;
@@ -69,7 +71,7 @@ function parseCookies(header: string | undefined): Record<string, string> {
 }
 
 const selectUser = db.prepare(
-  `SELECT u.id, u.username, u.display_name, u.avatar, u.bio, u.created_at, u.is_admin, u.banned, s.id AS sid
+  `SELECT u.id, u.username, u.display_name, u.avatar, u.bio, u.created_at, u.is_admin, u.banned, u.email, u.email_verified_at, s.id AS sid
    FROM sessions s JOIN users u ON u.id = s.user_id
    WHERE s.id = ? AND s.expires_at > ? AND u.banned = 0`,
 );

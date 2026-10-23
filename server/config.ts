@@ -24,6 +24,18 @@ export const config = {
   /** Per-step ffmpeg timeout. */
   ffmpegTimeoutMs: num("FFMPEG_TIMEOUT_MIN", 30, { min: 1 }) * 60_000,
   keepOriginals: process.env.KEEP_ORIGINALS === "1",
+  /** Transactional email, used only for optional account recovery. Unset = the whole feature stays hidden. */
+  mail: (() => {
+    const e = process.env;
+    const provider = (e.MAIL_PROVIDER ?? "").trim().toLowerCase();
+    if (!provider) return null;
+    if (!["resend", "postmark", "outbox"].includes(provider)) { console.warn(`[config] unknown MAIL_PROVIDER ${JSON.stringify(provider)}; email disabled`); return null; }
+    const from = (e.MAIL_FROM ?? "").trim();
+    if (!from) { console.warn("[config] MAIL_FROM is not set; email disabled"); return null; }
+    // "outbox" writes messages to disk instead of sending them, for local testing
+    if (provider !== "outbox" && !e.MAIL_API_KEY) { console.warn("[config] MAIL_API_KEY is not set; email disabled"); return null; }
+    return { provider, from, apiKey: e.MAIL_API_KEY ?? "", replyTo: (e.MAIL_REPLY_TO ?? "").trim() || null };
+  })(),
   // Unreleased features, off unless explicitly enabled on the server
   features: { versions: process.env.FEATURE_VERSIONS === "1" },
   publicUrl: (process.env.PUBLIC_URL ?? "").replace(/\/+$/, ""),
@@ -66,7 +78,8 @@ export const paths = {
   media: path.join(config.dataDir, "media"), // transcoded stream copies
   originals: path.join(config.dataDir, "originals"),
   avatars: path.join(config.dataDir, "avatars"), // profile photos when not on Bunny
+  outbox: path.join(config.dataDir, "outbox"),   // MAIL_PROVIDER=outbox writes messages here instead of sending
 };
-for (const p of [config.dataDir, paths.uploads, paths.media, paths.originals, paths.avatars]) {
+for (const p of [config.dataDir, paths.uploads, paths.media, paths.originals, paths.avatars, paths.outbox]) {
   fs.mkdirSync(p, { recursive: true, mode: 0o750 });
 }

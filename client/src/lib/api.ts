@@ -1,5 +1,6 @@
 export type ApiUser = {
   id: string; username: string; displayName: string; avatarUrl?: string | null; bio: string; createdAt: number;
+  email?: string | null; emailVerified?: boolean;
   audioCount: number; followers: number; following: number; isSelf: boolean;
   isFollowing?: boolean; totalPlays?: number; totalLikes?: number; isAdmin?: boolean; banned?: boolean;
 };
@@ -16,7 +17,7 @@ export type ApiAudio = {
   versions?: ApiVersion[];
 };
 export type ApiVersion = { id: string; slug: string; label: string };
-export type ApiFeatures = { versions: boolean };
+export type ApiFeatures = { versions: boolean; recovery: boolean };
 export type ApiStatus = { storage: { ok: boolean; since: number | null } };
 export type VersionsView = {
   main: string;

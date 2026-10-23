@@ -1,6 +1,7 @@
 import { Link } from "react-router-dom";
+import { useAuth } from "../lib/auth";
 
-const faqs: { q: string; a: React.ReactNode }[] = [
+const faqs = (recovery: boolean): { q: string; a: React.ReactNode }[] => [
   {
     q: "What is this?",
     a: "A place to upload audio and share it with a link. It's built for adult audio: roleplay, ASMR, hypnosis, scripts read aloud. You get a player, tags, search, playlists and stats. Listeners get a site that actually lets them find things.",
@@ -19,11 +20,13 @@ const faqs: { q: string; a: React.ReactNode }[] = [
   },
   {
     q: "Do I need an email address to sign up?",
-    a: "No. Just a username and a password. That also means there's no password reset, so put your password somewhere safe.",
+    a: recovery
+      ? <>No. A username and a password is all it takes, and that's how it will stay. You can optionally add one in Settings, used for a single thing: resetting your password if you forget it. Without one there's no way to prove an account is yours, so a forgotten password means losing it.</>
+      : <>No. A username and a password is all it takes. There's no password reset, so keep your password somewhere safe: a forgotten password means losing the account.</>,
   },
   {
     q: "What do you store about me?",
-    a: "Your username, your password (scrambled, never readable), your uploads, and listening stats like play counts. There's no email address, no real name, and only one cookie, which keeps you logged in. If you're logged in, what you listen to is linked to your account so plays and stats count properly; only the site admin can see that, and creators only ever see totals. If you're not logged in, plays are counted with a code made from your internet address and browser, scrambled with a secret key that's replaced every day and then thrown away, so it can't be traced back to you and doesn't follow you from one day to the next. Listening records are deleted after 400 days. Like any website, the server keeps a basic access log for up to 7 days to fix problems, with the last part of every internet address removed so it can't point to a single person. If you sign up, upload, import, comment or change your profile photo, the internet address you used is kept for 90 days, only to deal with abuse or legal requests. Listening never records it. There are no tracking pixels or third-party trackers, and your data isn't sold to anyone.",
+    a: "Your username, your password (scrambled, never readable), your uploads, and listening stats like play counts. " + (recovery ? "An optional email address, if you add one, used only to reset a forgotten password. " : "") + "There's no real name and only one cookie, which keeps you logged in. If you're logged in, what you listen to is linked to your account so plays and stats count properly; only the site admin can see that, and creators only ever see totals. If you're not logged in, plays are counted with a code made from your internet address and browser, scrambled with a secret key that's replaced every day and then thrown away, so it can't be traced back to you and doesn't follow you from one day to the next. Listening records are deleted after 400 days. Like any website, the server keeps a basic access log for up to 7 days to fix problems, with the last part of every internet address removed so it can't point to a single person. If you sign up, upload, import, comment or change your profile photo, the internet address you used is kept for 90 days, only to deal with abuse or legal requests. Listening never records it. There are no tracking pixels or third-party trackers, and your data isn't sold to anyone.",
   },
   {
     q: "How does importing from Soundgasm work?",
@@ -68,12 +71,13 @@ const faqs: { q: string; a: React.ReactNode }[] = [
 ];
 
 export function FaqPage() {
+  const { features } = useAuth();
   return (
     <div className="max-w-2xl mx-auto">
       <h1 className="text-3xl">Questions people ask</h1>
       <p className="text-muted mt-2">Plain answers. If yours isn't here, <a href="mailto:info@sinkdeeper.com" className="text-accent-2 hover:underline">email</a> and it probably will be soon.</p>
       <div className="mt-8 divide-y divide-border">
-        {faqs.map((f) => (
+        {faqs(features.recovery).map((f) => (
           <details key={f.q} className="group py-4">
             <summary className="cursor-pointer list-none flex items-start justify-between gap-4 font-semibold text-[1.02rem] hover:text-accent-2">
               <span>{f.q}</span>

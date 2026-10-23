@@ -10,7 +10,7 @@ rather than having to take that on trust.
 
 ## Privacy, in short
 
-- **No email, no real name, one cookie.** The only cookie keeps you logged in. No analytics services, trackers or ad networks.
+- **No email needed, no real name, one cookie.** Signing up takes a username and a password. An email address is optional, stored only if you add one, and used for a single thing: resetting a forgotten password. The only cookie keeps you logged in. No analytics services, trackers or ad networks.
 - **Anonymous listening is unlinkable.** Logged-out listeners are counted with a code made from their address and browser,
   scrambled with a random key that's replaced every day and never kept (`server/fingerprint.ts`). Raw addresses are never
   stored in the database.
@@ -31,7 +31,7 @@ you're welcome to read and review it, but not to reuse it without permission.
 
 ## Features
 
-- Username + password signup, no email. Session cookies, scrypt hashing.
+- Username + password signup, no email required. Optional verified recovery email for password resets (single-use hashed links); scrypt hashing, session cookies.
 - Uploads transcoded to AAC with waveform peaks; range-request streaming; persistent player with speed control and keyboard/media-key support.
 - Public, unlisted and private visibility per upload, plus a per-file **allow downloads** switch. Stream-only files return 403 on `?download=1` for everyone except the owner.
 - Explore page with multi-tag filtering and sort (newest / most played / most liked), full-text search, tag index.
@@ -209,4 +209,4 @@ zone (rows reference `bunny:` keys, nothing else needed) or `rclone copy b2:<buc
 
 - User reports queue, CAPTCHA on registration, email-free account recovery codes.
 - RSS feeds per user, notifications, series/collections, script-credit linking.
-- Password reset (deliberately absent because there is no email; consider recovery codes).
+- Recovery codes as an alternative to the optional recovery email, for people who want neither an email nor a lost account.

@@ -19,6 +19,7 @@ import { rateLimit } from "./ratelimit.js";
 import { db } from "./db.js";
 import { pruneActionIps } from "./accountability.js";
 import { startHealthChecks, storageStatus, storageDown } from "./health.js";
+import { pruneAuthTokens } from "./recovery.js";
 import { AUDIO_SELECT, canView, type AudioRow } from "./serialize.js";
 
 process.on("unhandledRejection", (e) => console.error("[unhandledRejection]", e));
@@ -91,6 +92,7 @@ function pruneAnalytics() {
     const cutoff = new Date(Date.now() - config.limits.analyticsRetentionDays * 86_400_000).toISOString().slice(0, 10);
     for (const t of ["play_events", "download_events", "listens"]) db.prepare(`DELETE FROM ${t} WHERE day < ?`).run(cutoff);
     pruneActionIps();
+    pruneAuthTokens();
   } catch (e) { console.error("[prune] failed", e); }
 }
 setInterval(pruneAnalytics, 24 * 3_600_000).unref();

@@ -10,7 +10,7 @@ type AuthCtx = {
   refresh: () => Promise<void>;
   logout: () => Promise<void>;
 };
-const NO_FEATURES: ApiFeatures = { versions: false };
+const NO_FEATURES: ApiFeatures = { versions: false, recovery: false };
 const Ctx = createContext<AuthCtx>({ user: null, quota: null, features: NO_FEATURES, loading: true, setUser: () => {}, refresh: async () => {}, logout: async () => {} });
 
 export function AuthProvider({ children }: { children: ReactNode }) {

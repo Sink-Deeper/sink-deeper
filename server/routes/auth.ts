@@ -12,17 +12,35 @@ import { config, paths } from "../config.js";
 import { AVATAR_EXT, AVATAR_MAX_BYTES, storeAvatar, removeAvatar } from "../avatar.js";
 import { deleteAccount } from "../account.js";
 import { recordAction } from "../accountability.js";
+import { mailEnabled, sendMail, linkTo } from "../mail.js";
+import { issueToken, consumeToken, RESET_TTL_MS, VERIFY_TTL_MS } from "../recovery.js";
 
-const USER_COLS = "id, username, display_name, avatar, bio, created_at, is_admin, banned";
+const USER_COLS = "id, username, display_name, avatar, bio, created_at, is_admin, banned, email, email_verified_at";
 const REG_WINDOW = 86_400_000;
 const LOGIN_WINDOW = 15 * 60_000;
 
 export const authRouter = Router();
 
+const emailField = z.string().trim().toLowerCase().email("That doesn't look like an email address").max(200);
 const credentials = z.object({
   username: z.string().trim().min(3).max(24).regex(/^[a-zA-Z0-9_]+$/, "Letters, numbers and underscores only"),
   password: z.string().min(8).max(200),
+  // Optional on purpose: an account never needs an email, it just can't be recovered without one
+  email: z.union([emailField, z.literal("")]).optional(),
 });
+
+/** Email is only for recovery, so it is off entirely unless a provider is configured. */
+const mailOn = (_req: unknown, _res: unknown, next: (e?: unknown) => void) =>
+  next(mailEnabled ? undefined : new HttpError(503, "Email isn't set up on this site yet."));
+
+async function sendVerification(userId: string, username: string, email: string): Promise<void> {
+  const token = issueToken(userId, "verify", email, VERIFY_TTL_MS);
+  await sendMail({
+    to: email,
+    subject: "Confirm your Sinkdeeper recovery email",
+    text: `Hi ${username},\n\nConfirm this address so it can be used to reset your password if you ever forget it:\n\n${linkTo(`/verify-email?token=${token}`)}\n\nThe link works once and expires in 24 hours. If you didn't add this address to a Sinkdeeper account, ignore this email and nothing will happen.\n`,
+  });
+}
 
 // Registration: only *successful* signups count against the per-IP daily limit, so a typo or a taken
 // username can't lock a legitimate person out for a day.
@@ -35,12 +53,14 @@ authRouter.post(
     const parsed = credentials.safeParse(req.body);
     if (!parsed.success) throw new HttpError(400, parsed.error.issues[0]?.message ?? "Invalid input");
     const { username, password } = parsed.data;
+    const email = parsed.data.email?.trim() || null;
+    if (email && !mailEnabled) throw new HttpError(503, "Email isn't set up on this site yet. Sign up without one.");
     const exists = db.prepare("SELECT 1 FROM users WHERE username = ?").get(username);
     if (exists) throw new HttpError(409, "That username is taken");
     const uid = id();
     const hash = await hashPassword(password);
     try {
-      db.prepare("INSERT INTO users (id, username, password_hash, display_name, bio, created_at) VALUES (?, ?, ?, ?, '', ?)").run(uid, username, hash, username, now());
+      db.prepare("INSERT INTO users (id, username, password_hash, display_name, bio, created_at, email) VALUES (?, ?, ?, ?, '', ?, ?)").run(uid, username, hash, username, now(), email);
     } catch (e: any) {
       if (String(e?.code).includes("CONSTRAINT")) throw new HttpError(409, "That username is taken");
       throw e;
@@ -48,6 +68,8 @@ authRouter.post(
     hit("register", k, config.limits.registrationsPerIpPerDay, REG_WINDOW);
     createSession(res, uid);
     recordAction(req, uid, "register");
+    // A failure here must not cost someone their new account; they can resend from Settings
+    if (email) await sendVerification(uid, username, email).catch((e) => console.error("[mail] verification send failed:", e instanceof Error ? e.message : e));
     const user = db.prepare(`SELECT ${USER_COLS} FROM users WHERE id = ?`).get(uid) as any;
     res.status(201).json({ user: serializeUser(user, user) });
   }),
@@ -103,7 +125,7 @@ export function quotaFor(userId: string) {
 }
 
 authRouter.get("/me", (req, res) => {
-  res.json({ user: req.user ? serializeUser(req.user, req.user) : null, quota: req.user ? quotaFor(req.user.id) : null, features: config.features });
+  res.json({ user: req.user ? serializeUser(req.user, req.user) : null, quota: req.user ? quotaFor(req.user.id) : null, features: { ...config.features, recovery: mailEnabled } });
 });
 
 authRouter.patch(
@@ -181,6 +203,107 @@ authRouter.post(
     const { audios } = await deleteAccount(req.user!.id);
     destroySession(req, res);
     res.json({ ok: true, audios });
+  }),
+);
+
+// ---- Optional recovery email -------------------------------------------------------------------------------
+// An address is only useful once verified, so "forgot password" ignores unverified ones. Responses never reveal
+// whether an account or address exists.
+authRouter.post(
+  "/email",
+  mailOn,
+  requireAuth,
+  rateLimit({ name: "email-set", max: 5, windowMs: 3_600_000, message: "Too many changes. Try again in an hour." }),
+  asyncHandler(async (req, res) => {
+    const parsed = z.object({ email: emailField }).safeParse(req.body);
+    if (!parsed.success) throw new HttpError(400, parsed.error.issues[0]?.message ?? "Invalid email");
+    const email = parsed.data.email;
+    db.prepare("UPDATE users SET email = ?, email_verified_at = NULL WHERE id = ?").run(email, req.user!.id);
+    await sendVerification(req.user!.id, req.user!.username, email);
+    const user = db.prepare(`SELECT ${USER_COLS} FROM users WHERE id = ?`).get(req.user!.id) as any;
+    res.json({ user: serializeUser(user, user) });
+  }),
+);
+
+authRouter.post(
+  "/email/resend",
+  mailOn,
+  requireAuth,
+  rateLimit({ name: "email-resend", max: 5, windowMs: 3_600_000, message: "Too many emails sent. Try again in an hour." }),
+  asyncHandler(async (req, res) => {
+    const row = db.prepare("SELECT email, email_verified_at FROM users WHERE id = ?").get(req.user!.id) as { email: string | null; email_verified_at: number | null };
+    if (!row.email) throw new HttpError(400, "No recovery email on this account");
+    if (row.email_verified_at) return res.json({ ok: true });
+    await sendVerification(req.user!.id, req.user!.username, row.email);
+    res.json({ ok: true });
+  }),
+);
+
+authRouter.delete("/email", requireAuth, asyncHandler((req, res) => {
+  db.prepare("UPDATE users SET email = NULL, email_verified_at = NULL WHERE id = ?").run(req.user!.id);
+  db.prepare("DELETE FROM auth_tokens WHERE user_id = ?").run(req.user!.id);
+  const user = db.prepare(`SELECT ${USER_COLS} FROM users WHERE id = ?`).get(req.user!.id) as any;
+  res.json({ user: serializeUser(user, user) });
+}));
+
+authRouter.post(
+  "/email/verify",
+  mailOn,
+  rateLimit({ name: "email-verify", by: "ip", max: 20, windowMs: 3_600_000 }),
+  asyncHandler((req, res) => {
+    const parsed = z.object({ token: z.string().max(200) }).safeParse(req.body);
+    if (!parsed.success) throw new HttpError(400, "Invalid input");
+    const t = consumeToken(parsed.data.token, "verify");
+    if (!t) throw new HttpError(400, "That link has expired or already been used. Send a new one from Settings.");
+    // Only confirm the address the link was issued for: it may have been changed since
+    const changed = db.prepare("UPDATE users SET email_verified_at = ? WHERE id = ? AND lower(email) = ?").run(now(), t.user_id, t.email).changes;
+    if (!changed) throw new HttpError(400, "That address is no longer on the account.");
+    res.json({ ok: true });
+  }),
+);
+
+// Forgotten password: always the same answer, whether or not anything matched.
+authRouter.post(
+  "/forgot",
+  mailOn,
+  rateLimit({ name: "forgot", by: "ip", max: 5, windowMs: 3_600_000, message: "Too many requests. Try again in an hour." }),
+  asyncHandler(async (req, res) => {
+    const parsed = z.object({ account: z.string().trim().max(200) }).safeParse(req.body);
+    const same = { ok: true, message: "If that account has a confirmed recovery email, a reset link is on its way." };
+    if (!parsed.success || !parsed.data.account) return res.json(same);
+    const account = parsed.data.account;
+    const row = db.prepare(
+      "SELECT id, username, email FROM users WHERE email_verified_at IS NOT NULL AND banned = 0 AND (username = ? COLLATE NOCASE OR lower(email) = lower(?))",
+    ).get(account, account) as { id: string; username: string; email: string } | undefined;
+    if (row) {
+      const perAccount = hit("forgot-account", `acct:${row.id}`, 3, 3_600_000);
+      if (perAccount.ok) {
+        const token = issueToken(row.id, "reset", row.email, RESET_TTL_MS);
+        await sendMail({
+          to: row.email,
+          subject: "Reset your Sinkdeeper password",
+          text: `Hi ${row.username},\n\nSomeone asked to reset the password for your account. If that was you, use this link within the hour:\n\n${linkTo(`/reset-password?token=${token}`)}\n\nThe link works once. If it wasn't you, ignore this email: your password hasn't changed and nobody can get in without this link.\n`,
+        }).catch((e) => console.error("[mail] reset send failed:", e instanceof Error ? e.message : e));
+      }
+    }
+    res.json(same);
+  }),
+);
+
+authRouter.post(
+  "/reset",
+  mailOn,
+  rateLimit({ name: "reset", by: "ip", max: 10, windowMs: LOGIN_WINDOW, message: "Too many attempts. Wait 15 minutes." }),
+  asyncHandler(async (req, res) => {
+    const parsed = z.object({ token: z.string().max(200), password: z.string().min(8).max(200) }).safeParse(req.body);
+    if (!parsed.success) throw new HttpError(400, "Password must be at least 8 characters");
+    const t = consumeToken(parsed.data.token, "reset");
+    if (!t) throw new HttpError(400, "That reset link has expired or already been used. Request a new one.");
+    db.prepare("UPDATE users SET password_hash = ? WHERE id = ?").run(await hashPassword(parsed.data.password), t.user_id);
+    // Whoever had the old password, including anyone who shouldn't, is logged out everywhere
+    db.prepare("DELETE FROM sessions WHERE user_id = ?").run(t.user_id);
+    destroySession(req, res);
+    res.json({ ok: true });
   }),
 );
 

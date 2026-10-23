@@ -9,6 +9,7 @@ import { ImportPage } from "./pages/Import";
 import { BulkUploadPage } from "./pages/BulkUpload";
 import { Navigate } from "react-router-dom";
 import { AuthPage } from "./pages/Auth";
+import { ForgotPasswordPage, ResetPasswordPage, VerifyEmailPage } from "./pages/Recovery";
 import { UploadPage } from "./pages/Upload";
 import { AudioPage } from "./pages/AudioPage";
 import { EditAudioPage } from "./pages/EditAudio";
@@ -44,6 +45,9 @@ export default function App() {
         <Route path="/following" element={<Home mode="following" />} />
         <Route path="/login" element={<AuthPage key="login" mode="login" />} />
         <Route path="/register" element={<AuthPage key="register" mode="register" />} />
+        <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+        <Route path="/reset-password" element={<ResetPasswordPage />} />
+        <Route path="/verify-email" element={<VerifyEmailPage />} />
         <Route path="/upload" element={<UploadPage />} />
         <Route path="/upload/bulk" element={<BulkUploadPage />} />
         <Route path="/import" element={<ImportPage />} />

@@ -5,7 +5,7 @@ import { api, type ApiUser } from "../lib/api";
 import { useAuth } from "../lib/auth";
 
 export function SettingsPage() {
-  const { user, loading, setUser } = useAuth();
+  const { user, loading, setUser, features } = useAuth();
   const nav = useNavigate();
   const [displayName, setDisplayName] = useState("");
   const [bio, setBio] = useState("");
@@ -18,6 +18,9 @@ export function SettingsPage() {
   const [del, setDel] = useState({ password: "", confirm: "" });
   const [delMsg, setDelMsg] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
+  const [email, setEmail] = useState("");
+  const [emailMsg, setEmailMsg] = useState<string | null>(null);
+  const [emailBusy, setEmailBusy] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => { if (!loading && !user) nav("/login"); if (user) { setDisplayName(user.displayName); setBio(user.bio); } }, [user, loading, nav]);
@@ -43,6 +46,23 @@ export function SettingsPage() {
     try { const r = await api.del<{ user: ApiUser }>("/api/auth/me/avatar"); setUser(r.user); setPhotoMsg("Photo removed."); }
     catch (err: any) { setPhotoMsg(err.message); }
     finally { setPhotoBusy(false); }
+  };
+  const saveEmail = async (e: FormEvent) => {
+    e.preventDefault();
+    setEmailBusy(true); setEmailMsg(null);
+    try { const r = await api.post<{ user: ApiUser }>("/api/auth/email", { email }); setUser(r.user); setEmail(""); setEmailMsg("Check your inbox for a confirmation link."); }
+    catch (err: any) { setEmailMsg(err.message); } finally { setEmailBusy(false); }
+  };
+  const resendEmail = async () => {
+    setEmailBusy(true); setEmailMsg(null);
+    try { await api.post("/api/auth/email/resend"); setEmailMsg("Sent again. Check your inbox and spam folder."); }
+    catch (err: any) { setEmailMsg(err.message); } finally { setEmailBusy(false); }
+  };
+  const removeEmail = async () => {
+    if (!confirm("Remove your recovery email? Without one, a forgotten password means losing the account.")) return;
+    setEmailBusy(true); setEmailMsg(null);
+    try { const r = await api.del<{ user: ApiUser }>("/api/auth/email"); setUser(r.user); setEmailMsg("Removed."); }
+    catch (err: any) { setEmailMsg(err.message); } finally { setEmailBusy(false); }
   };
   const deleteAccount = async (e: FormEvent) => {
     e.preventDefault();
@@ -84,6 +104,38 @@ export function SettingsPage() {
         <div><label className="block text-sm mb-1.5">Bio</label><textarea className="input min-h-28" value={bio} onChange={(e) => setBio(e.target.value)} maxLength={2000} placeholder="Who you are, what you make, where else to find you." /></div>
         <div className="flex items-center gap-3"><button className="btn-primary" type="submit">Save</button>{msg && <span className="text-sm text-muted">{msg}</span>}</div>
       </form>
+      {features.recovery && (
+        <div className="card p-5 space-y-3">
+          <h2 className="font-semibold">Recovery email</h2>
+          {user.email ? (
+            <>
+              <p className="text-sm">
+                <b>{user.email}</b>{" "}
+                {user.emailVerified
+                  ? <span className="text-emerald-400">· confirmed</span>
+                  : <span className="text-amber-300">· not confirmed yet, so it can't reset your password</span>}
+              </p>
+              <div className="flex flex-wrap gap-2">
+                {!user.emailVerified && <button type="button" className="btn-outline" disabled={emailBusy} onClick={resendEmail}>Send the confirmation link again</button>}
+                <button type="button" className="btn-ghost text-muted" disabled={emailBusy} onClick={removeEmail}>Remove</button>
+              </div>
+            </>
+          ) : (
+            <p className="rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs text-amber-200">
+              <b>This account can't be recovered.</b> If you forget your password, there's no way to prove the account is yours, and everything in it is lost. Adding an email fixes that.
+            </p>
+          )}
+          <form onSubmit={saveEmail} className="space-y-2">
+            <label className="block text-sm">{user.email ? "Use a different address" : "Add an address"}</label>
+            <div className="flex flex-wrap gap-2">
+              <input className="input flex-1 min-w-48" type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@example.com" maxLength={200} required autoComplete="email" />
+              <button className="btn-primary" type="submit" disabled={emailBusy}>{emailBusy ? "…" : "Save"}</button>
+            </div>
+            <p className="text-xs text-muted">Only ever used to reset your password. It's never shown on your profile, never shared, and you can remove it any time.</p>
+            {emailMsg && <p className="text-sm text-muted">{emailMsg}</p>}
+          </form>
+        </div>
+      )}
       <form onSubmit={savePw} className="card p-5 space-y-4">
         <h2 className="font-semibold">Change password</h2>
         <div><label className="block text-sm mb-1.5">Current password</label><input className="input" type="password" value={pw.current} onChange={(e) => setPw({ ...pw, current: e.target.value })} required autoComplete="current-password" /></div>

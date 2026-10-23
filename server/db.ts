@@ -174,6 +174,8 @@ addColumn("users", "verify_code", "TEXT");
 addColumn("users", "verified_source", "TEXT");
 addColumn("users", "verified_at", "INTEGER");
 addColumn("audios", "claimed_by", "TEXT");
+addColumn("users", "email", "TEXT");                  // optional recovery address; never required to sign up
+addColumn("users", "email_verified_at", "INTEGER");    // only a verified address can recover an account
 addColumn("users", "avatar", "TEXT"); // profile photo: local path or bunny:avatars/<key>
 addColumn("audios", "group_id", "TEXT"); // versions of the same work (F4M / F4A ...) share the primary audio's id
 addColumn("audios", "variant_label", "TEXT"); // what the switcher calls this version; falls back to its audience tag // set when the real Soundgasm owner reclaims an import made by someone else
@@ -190,3 +192,16 @@ db.exec(`CREATE TABLE IF NOT EXISTS action_ips (
 );
 CREATE INDEX IF NOT EXISTS idx_action_ips_created ON action_ips(created_at);
 CREATE INDEX IF NOT EXISTS idx_action_ips_user ON action_ips(user_id);`);
+// Password-reset and email-verification links. Only the hash is stored, so a stolen database can't be used to
+// reset anyone's password; each token is single use and expires.
+db.exec(`CREATE TABLE IF NOT EXISTS auth_tokens (
+  token_hash TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  kind TEXT NOT NULL CHECK (kind IN ('reset','verify')),
+  email TEXT NOT NULL,
+  created_at INTEGER NOT NULL,
+  expires_at INTEGER NOT NULL,
+  used_at INTEGER
+);
+CREATE INDEX IF NOT EXISTS idx_auth_tokens_user ON auth_tokens(user_id, kind);
+CREATE INDEX IF NOT EXISTS idx_auth_tokens_expiry ON auth_tokens(expires_at);`);
