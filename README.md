@@ -10,7 +10,7 @@ rather than having to take that on trust.
 
 ## Privacy, in short
 
-- **No email needed, no real name, one cookie.** Signing up takes a username and a password. An email address is optional, used for a single thing: resetting a forgotten password. It is stored encrypted (AES-256-GCM, key in the server environment) next to a keyed hash used for lookups, so a leaked database or backup exposes neither who has an address nor what it is (`server/emailstore.ts`). The only cookie keeps you logged in. No analytics services, trackers or ad networks.
+- **No email needed, no real name, one cookie.** Signing up takes a username and a password. An email address is optional, used for a single thing: resetting a forgotten password. **The address is never stored**, only a keyed hash of it (`server/emailstore.ts`), so nothing can read it, look it up or send to it. Resetting means typing the address again: the site checks it against the hash and sends the link to what you typed. The only cookie keeps you logged in. No analytics services, trackers or ad networks.
 - **Anonymous listening is unlinkable.** Logged-out listeners are counted with a code made from their address and browser,
   scrambled with a random key that's replaced every day and never kept (`server/fingerprint.ts`). Raw addresses are never
   stored in the database.
@@ -31,7 +31,7 @@ you're welcome to read and review it, but not to reuse it without permission.
 
 ## Features
 
-- Username + password signup, no email required. Optional verified recovery email for password resets (single-use hashed links); scrypt hashing, session cookies.
+- Username + password signup, no email required. Optional recovery email for password resets, kept only as a keyed hash; single-use hashed reset links; scrypt hashing, session cookies.
 - Uploads transcoded to AAC with waveform peaks; range-request streaming; persistent player with speed control and keyboard/media-key support.
 - Public, unlisted and private visibility per upload, plus a per-file **allow downloads** switch. Stream-only files return 403 on `?download=1` for everyone except the owner.
 - Explore page with multi-tag filtering and sort (newest / most played / most liked), full-text search, tag index.

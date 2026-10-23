@@ -6,7 +6,7 @@ import { useAuth } from "../lib/auth";
 /** "I've forgotten my password": asks for a username or email and always gives the same answer. */
 export function ForgotPasswordPage() {
   const { features } = useAuth();
-  const [account, setAccount] = useState("");
+  const [address, setAddress] = useState("");
   const [sent, setSent] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -14,7 +14,7 @@ export function ForgotPasswordPage() {
   const submit = async (e: FormEvent) => {
     e.preventDefault();
     setBusy(true); setError(null);
-    try { const r = await api.post<{ message: string }>("/api/auth/forgot", { account }); setSent(r.message); }
+    try { const r = await api.post<{ message: string }>("/api/auth/forgot", { email: address }); setSent(r.message); }
     catch (err: any) { setError(err.message); } finally { setBusy(false); }
   };
 
@@ -22,7 +22,7 @@ export function ForgotPasswordPage() {
   return (
     <div className="max-w-sm mx-auto py-10">
       <h1 className="text-2xl mb-1">Forgotten password</h1>
-      <p className="text-sm text-muted mb-6">If you added a recovery email and confirmed it, we can send you a reset link.</p>
+      <p className="text-sm text-muted mb-6">Type the address you added as your recovery email. The site never stores addresses, so it can only check whether yours matches and send the link straight back to it.</p>
       {sent ? (
         <>
           <p className="rounded-lg border border-emerald-500/40 bg-emerald-500/10 px-3 py-3 text-sm text-emerald-200">{sent}</p>
@@ -31,8 +31,9 @@ export function ForgotPasswordPage() {
       ) : (
         <form onSubmit={submit} className="space-y-4">
           <div>
-            <label className="block text-sm mb-1.5">Username or recovery email</label>
-            <input className="input" value={account} onChange={(e) => setAccount(e.target.value)} autoFocus required maxLength={200} />
+            <label className="block text-sm mb-1.5">Your recovery email</label>
+            <input className="input" type="email" value={address} onChange={(e) => setAddress(e.target.value)} autoFocus required maxLength={200} autoComplete="email" />
+            <p className="text-xs text-muted mt-1">It has to be the exact address you confirmed. There's no way for us to look it up or remind you.</p>
           </div>
           {error && <p className="text-sm text-red-400">{error}</p>}
           <button className="btn-primary w-full" disabled={busy} type="submit">{busy ? "…" : "Send reset link"}</button>

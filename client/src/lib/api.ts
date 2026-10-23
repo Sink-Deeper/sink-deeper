@@ -1,6 +1,6 @@
 export type ApiUser = {
   id: string; username: string; displayName: string; avatarUrl?: string | null; bio: string; createdAt: number;
-  email?: string | null; emailVerified?: boolean;
+  hasRecoveryEmail?: boolean; emailVerified?: boolean;
   audioCount: number; followers: number; following: number; isSelf: boolean;
   isFollowing?: boolean; totalPlays?: number; totalLikes?: number; isAdmin?: boolean; banned?: boolean;
 };

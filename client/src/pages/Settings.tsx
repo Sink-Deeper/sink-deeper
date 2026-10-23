@@ -50,12 +50,7 @@ export function SettingsPage() {
   const saveEmail = async (e: FormEvent) => {
     e.preventDefault();
     setEmailBusy(true); setEmailMsg(null);
-    try { const r = await api.post<{ user: ApiUser }>("/api/auth/email", { email }); setUser(r.user); setEmail(""); setEmailMsg("Check your inbox for a confirmation link."); }
-    catch (err: any) { setEmailMsg(err.message); } finally { setEmailBusy(false); }
-  };
-  const resendEmail = async () => {
-    setEmailBusy(true); setEmailMsg(null);
-    try { await api.post("/api/auth/email/resend"); setEmailMsg("Sent again. Check your inbox and spam folder."); }
+    try { const r = await api.post<{ user: ApiUser }>("/api/auth/email", { email }); setUser(r.user); setEmail(""); setEmailMsg("Confirmation link sent. Check your inbox, and your spam folder."); }
     catch (err: any) { setEmailMsg(err.message); } finally { setEmailBusy(false); }
   };
   const removeEmail = async () => {
@@ -107,18 +102,15 @@ export function SettingsPage() {
       {features.recovery && (
         <div className="card p-5 space-y-3">
           <h2 className="font-semibold">Recovery email</h2>
-          {user.email ? (
+          {user.hasRecoveryEmail ? (
             <>
               <p className="text-sm">
-                <b>{user.email}</b>{" "}
                 {user.emailVerified
-                  ? <span className="text-emerald-400">· confirmed</span>
-                  : <span className="text-amber-300">· not confirmed yet, so it can't reset your password</span>}
+                  ? <span className="text-emerald-400">An address is set and confirmed.</span>
+                  : <span className="text-amber-300">An address is set but not confirmed yet, so it can't reset your password.</span>}{" "}
+                <span className="text-muted">We don't keep the address itself, only a scrambled version, so it can't be shown back to you.</span>
               </p>
-              <div className="flex flex-wrap gap-2">
-                {!user.emailVerified && <button type="button" className="btn-outline" disabled={emailBusy} onClick={resendEmail}>Send the confirmation link again</button>}
-                <button type="button" className="btn-ghost text-muted" disabled={emailBusy} onClick={removeEmail}>Remove</button>
-              </div>
+              <button type="button" className="btn-ghost text-muted" disabled={emailBusy} onClick={removeEmail}>Remove it</button>
             </>
           ) : (
             <p className="rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs text-amber-200">
@@ -126,12 +118,12 @@ export function SettingsPage() {
             </p>
           )}
           <form onSubmit={saveEmail} className="space-y-2">
-            <label className="block text-sm">{user.email ? "Use a different address" : "Add an address"}</label>
+            <label className="block text-sm">{user.hasRecoveryEmail ? "Set it again, or use a different address" : "Add an address"}</label>
             <div className="flex flex-wrap gap-2">
               <input className="input flex-1 min-w-48" type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@example.com" maxLength={200} required autoComplete="email" />
               <button className="btn-primary" type="submit" disabled={emailBusy}>{emailBusy ? "…" : "Save"}</button>
             </div>
-            <p className="text-xs text-muted">Only ever used to reset your password. It's stored encrypted, never shown on your profile, never shared, and you can remove it any time.</p>
+            <p className="text-xs text-muted">Only ever used to reset your password. The address itself is never stored, only a scrambled version we can check against, so it can't be read, shared or used for anything else.</p>
             {emailMsg && <p className="text-sm text-muted">{emailMsg}</p>}
           </form>
         </div>

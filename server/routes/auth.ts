@@ -14,9 +14,9 @@ import { deleteAccount } from "../account.js";
 import { recordAction } from "../accountability.js";
 import { mailEnabled, sendMail, linkTo } from "../mail.js";
 import { issueToken, consumeToken, RESET_TTL_MS, VERIFY_TTL_MS } from "../recovery.js";
-import { encryptEmail, decryptEmail, emailLookup } from "../emailstore.js";
+import { emailHash, normalizeEmail } from "../emailstore.js";
 
-const USER_COLS = "id, username, display_name, avatar, bio, created_at, is_admin, banned, email, email_verified_at";
+const USER_COLS = "id, username, display_name, avatar, bio, created_at, is_admin, banned, email_lookup, email_verified_at";
 const REG_WINDOW = 86_400_000;
 const LOGIN_WINDOW = 15 * 60_000;
 
@@ -35,7 +35,7 @@ const mailOn = (_req: unknown, _res: unknown, next: (e?: unknown) => void) =>
   next(mailEnabled ? undefined : new HttpError(503, "Email isn't set up on this site yet."));
 
 async function sendVerification(userId: string, username: string, email: string): Promise<void> {
-  const token = issueToken(userId, "verify", emailLookup(email), VERIFY_TTL_MS);
+  const token = issueToken(userId, "verify", emailHash(email), VERIFY_TTL_MS);
   await sendMail({
     to: email,
     subject: "Confirm your Sinkdeeper recovery email",
@@ -61,8 +61,8 @@ authRouter.post(
     const uid = id();
     const hash = await hashPassword(password);
     try {
-      db.prepare("INSERT INTO users (id, username, password_hash, display_name, bio, created_at, email, email_lookup) VALUES (?, ?, ?, ?, '', ?, ?, ?)")
-        .run(uid, username, hash, username, now(), email ? encryptEmail(email) : null, email ? emailLookup(email) : null);
+      db.prepare("INSERT INTO users (id, username, password_hash, display_name, bio, created_at, email_lookup) VALUES (?, ?, ?, ?, '', ?, ?)")
+        .run(uid, username, hash, username, now(), email ? emailHash(email) : null);
     } catch (e: any) {
       if (String(e?.code).includes("CONSTRAINT")) throw new HttpError(409, "That username is taken");
       throw e;
@@ -220,30 +220,16 @@ authRouter.post(
     const parsed = z.object({ email: emailField }).safeParse(req.body);
     if (!parsed.success) throw new HttpError(400, parsed.error.issues[0]?.message ?? "Invalid email");
     const email = parsed.data.email;
-    db.prepare("UPDATE users SET email = ?, email_lookup = ?, email_verified_at = NULL WHERE id = ?").run(encryptEmail(email), emailLookup(email), req.user!.id);
+    db.prepare("UPDATE users SET email_lookup = ?, email_verified_at = NULL WHERE id = ?").run(emailHash(email), req.user!.id);
     await sendVerification(req.user!.id, req.user!.username, email);
     const user = db.prepare(`SELECT ${USER_COLS} FROM users WHERE id = ?`).get(req.user!.id) as any;
     res.json({ user: serializeUser(user, user) });
   }),
 );
 
-authRouter.post(
-  "/email/resend",
-  mailOn,
-  requireAuth,
-  rateLimit({ name: "email-resend", max: 5, windowMs: 3_600_000, message: "Too many emails sent. Try again in an hour." }),
-  asyncHandler(async (req, res) => {
-    const row = db.prepare("SELECT email, email_verified_at FROM users WHERE id = ?").get(req.user!.id) as { email: string | null; email_verified_at: number | null };
-    const address = decryptEmail(row.email);
-    if (!address) throw new HttpError(400, "No recovery email on this account");
-    if (row.email_verified_at) return res.json({ ok: true });
-    await sendVerification(req.user!.id, req.user!.username, address);
-    res.json({ ok: true });
-  }),
-);
 
 authRouter.delete("/email", requireAuth, asyncHandler((req, res) => {
-  db.prepare("UPDATE users SET email = NULL, email_lookup = NULL, email_verified_at = NULL WHERE id = ?").run(req.user!.id);
+  db.prepare("UPDATE users SET email_lookup = NULL, email_verified_at = NULL WHERE id = ?").run(req.user!.id);
   db.prepare("DELETE FROM auth_tokens WHERE user_id = ?").run(req.user!.id);
   const user = db.prepare(`SELECT ${USER_COLS} FROM users WHERE id = ?`).get(req.user!.id) as any;
   res.json({ user: serializeUser(user, user) });
@@ -272,16 +258,15 @@ authRouter.post(
   mailOn,
   rateLimit({ name: "forgot", by: "ip", max: 5, windowMs: 3_600_000, message: "Too many requests. Try again in an hour." }),
   asyncHandler(async (req, res) => {
-    const parsed = z.object({ account: z.string().trim().max(200) }).safeParse(req.body);
-    const same = { ok: true, message: "If that account has a confirmed recovery email, a reset link is on its way." };
-    if (!parsed.success || !parsed.data.account) return res.json(same);
-    const account = parsed.data.account;
-    const looksLikeEmail = account.includes("@");
+    // The address has to be typed, because the site has no way to look one up: only a hash of it is stored.
+    const parsed = z.object({ email: emailField }).safeParse(req.body);
+    const same = { ok: true, message: "If that address is the confirmed recovery email on an account, a reset link is on its way." };
+    if (!parsed.success) return res.json(same);
+    const address = normalizeEmail(parsed.data.email);
     const row = db.prepare(
-      "SELECT id, username, email FROM users WHERE email_verified_at IS NOT NULL AND banned = 0 AND (username = ? COLLATE NOCASE OR email_lookup = ?)",
-    ).get(account, looksLikeEmail ? emailLookup(account) : "") as { id: string; username: string; email: string } | undefined;
-    const address = row ? decryptEmail(row.email) : null;
-    if (row && address) {
+      "SELECT id, username FROM users WHERE email_verified_at IS NOT NULL AND banned = 0 AND email_lookup = ?",
+    ).get(emailHash(address)) as { id: string; username: string } | undefined;
+    if (row) {
       const perAccount = hit("forgot-account", `acct:${row.id}`, 3, 3_600_000);
       if (perAccount.ok) {
         const token = issueToken(row.id, "reset", "", RESET_TTL_MS);

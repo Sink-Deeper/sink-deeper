@@ -44,7 +44,7 @@ export function AuthPage({ mode }: { mode: "login" | "register" }) {
             <input className="input" type="email" value={email} onChange={(e) => setEmail(e.target.value)} autoComplete="email" maxLength={200} placeholder="you@example.com" />
             <p className="text-xs text-muted mt-1">
               {email.trim()
-                ? "We'll send one message to confirm it. It's only ever used to reset your password, never for anything else."
+                ? "We'll send one message to confirm it. The address itself is never stored, only a scrambled version, so it can't be used for anything but resetting your password."
                 : "Only used to reset your password if you forget it. You can add one later in Settings."}
             </p>
           </div>
