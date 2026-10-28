@@ -281,9 +281,12 @@ authRouter.post(
   }),
 );
 
+// Deliberately not behind `mailOn`: spending a token that was already issued sends nothing, and a link
+// must keep working if mail is reconfigured mid-flight. It is also how an admin-issued link (see
+// scripts/reset-link.ts) gets someone back in when they never set a recovery address. Without a live
+// token in `auth_tokens` the route can do nothing at all.
 authRouter.post(
   "/reset",
-  mailOn,
   rateLimit({ name: "reset", by: "ip", max: 10, windowMs: LOGIN_WINDOW, message: "Too many attempts. Wait 15 minutes." }),
   asyncHandler(async (req, res) => {
     const parsed = z.object({ token: z.string().max(200), password: z.string().min(8).max(200) }).safeParse(req.body);
